@@ -1,0 +1,23 @@
+services:
+  db:
+    image: mysql:5.7
+    container_name: dataBase
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: livestream
+      MYSQL_USER: livestream
+      MYSQL_PASSWORD: livestream
+    ports:
+      - "3306:3306"
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    container_name: phpMyAdmin
+    links:
+      - db
+    environment:
+      PMA_HOST: dataBase
+      PMA_PORT: 3306
+      PMA_ARBITRARY: 1
+    restart: always
+    ports:
+      - 8080:80
