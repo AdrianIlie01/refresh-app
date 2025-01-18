@@ -36,7 +36,7 @@ export class VideoInterceptor extends FileInterceptor('file', {
       // Verifică dacă numele fișierului există deja în folder
       const files = fs.readdirSync(videoPath);
       const matchingFiles = files.filter((f) => f.includes(fileName));
-      
+
       if (matchingFiles.length > 0) {
         // Adaugă un număr incremental la numele fișierului
         const lastIndex: number = matchingFiles.length - 1;

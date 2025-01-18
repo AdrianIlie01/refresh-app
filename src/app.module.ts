@@ -22,10 +22,10 @@ import { OtpEntity } from "./otp/entities/otp.entity";
     TypeOrmModule.forRoot({
       type: 'mysql',
       host: 'localhost',
-      port: 3306,
-      username: 'livestream',
-      password: 'livestream',
-      database: 'livestream',
+      port:  +process.env.DD_PORT,
+      username: process.env.DB_HOST,
+      password: process.env.DB_PASSWORD,
+      database: process.env.DB_DATABASE,
       entities: [
         UserEntity,
         UserInfoEntity,
