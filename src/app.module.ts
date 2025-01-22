@@ -15,17 +15,26 @@ import { RoomEntity } from "./room/entities/room.entity";
 import { VideoEntity } from "./video/entities/video.entity";
 import { OtpModule } from './otp/otp.module';
 import { OtpEntity } from "./otp/entities/otp.entity";
+import { JwtModule } from "@nestjs/jwt";
+import * as process from "process";
+import { ConfigModule } from "@nestjs/config";
 
 
 @Module({
   imports: [
+    ConfigModule.forRoot(),
     TypeOrmModule.forRoot({
       type: 'mysql',
-      host: process.env.HOST,
-      port:  +process.env.PORT,
-      username: process.env.USERNAME,
-      password: process.env.PASSWORD,
-      database: process.env.DATABASE,
+      host: 'localhost',
+      port:  3306,
+      username: 'livestream',
+      password: 'livestream',
+      database: 'livestream',
+      // host: process.env.HOST,
+      // port:  +process.env.DB_PORT,
+      // username: process.env.USERNAME,
+      // password: process.env.PASSWORD,
+      // database: process.env.DATABASE,
       entities: [
         UserEntity,
         UserInfoEntity,
@@ -34,6 +43,12 @@ import { OtpEntity } from "./otp/entities/otp.entity";
         OtpEntity
       ],
       synchronize: true,
+    }),
+    JwtModule.register( {
+      secret: process.env.SECRET_JWT,
+      signOptions: {
+        expiresIn: process.env.EXPIRES_IN_JWT,
+      }
     }),
     UserModule,
     AuthModule,

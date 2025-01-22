@@ -20,7 +20,7 @@ export class VideoEntity extends BaseEntity {
   @CreateDateColumn({ type: 'datetime' })
   create_date: Date;
 
-  @ManyToOne(() => UserEntity, (user: UserEntity) => user.video)
+  @ManyToOne(() => UserEntity, (user: UserEntity) => user.video, {eager: true})
   @JoinColumn({name: 'user', referencedColumnName: 'id'})
   user: UserEntity
 

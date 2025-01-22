@@ -2,23 +2,23 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import * as process from "process";
+import * as cookieParser from 'cookie-parser';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.enableCors({
     exposedHeaders: ['x-forwarded-for'],
+
+    origin: process.env.ORIGIN,  // Adresa frontend-ului tău (poate fi localhost sau URL-ul aplicației)
+
+    // origin: 'http://localhost:4200',
+    credentials: true, // Permite trimiterea cookie-urilor
   });
 
-  app.useGlobalPipes(new ValidationPipe());
+  app.use(cookieParser());
 
-  const config = new DocumentBuilder()
-    .setTitle('api call')
-    .setDescription('The API description')
-    .setVersion('1.0')
-    .addTag('user')
-    .build();
-  const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api', app, document);
+  app.useGlobalPipes(new ValidationPipe());
 
   await app.listen(process.env.PORT || 3000);
 }

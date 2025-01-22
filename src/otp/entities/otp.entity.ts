@@ -4,7 +4,7 @@ import {
   CreateDateColumn,
   Entity, JoinColumn,
   ManyToOne,
-  PrimaryColumn,
+  PrimaryColumn, PrimaryGeneratedColumn,
   UpdateDateColumn
 } from "typeorm";
 import { UserEntity } from '../../user/entities/user.entity';
@@ -13,11 +13,8 @@ import { Action } from '../../shared/action';
 @Entity('otp')
 export class OtpEntity extends BaseEntity {
 
-  @PrimaryColumn( 'uuid')
+  @PrimaryGeneratedColumn( 'uuid')
   id: string;
-
-  @Column({ type: 'varchar', length: 255 })
-  token: string;
 
   @Column({ type: 'enum', enum: Action })
   action: Action;
@@ -28,7 +25,7 @@ export class OtpEntity extends BaseEntity {
   @Column({ type: 'datetime' })
   expires_at: Date;
 
-  @ManyToOne(() => UserEntity, (user: UserEntity) => user.otp)
+  @ManyToOne(() => UserEntity, (user: UserEntity) => user.otp, {eager: true})
   @JoinColumn({ name: 'user', referencedColumnName: 'id' })
   user: UserEntity;
 }

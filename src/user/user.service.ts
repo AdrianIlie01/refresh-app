@@ -28,7 +28,7 @@ export class UserService
       let data = {};
 
       if (savedUser) {
-        const {password, remember_token, ...restData} = savedUser;
+        const {password, refresh_token, ...restData} = savedUser;
         data = restData;
       }
 
@@ -55,7 +55,7 @@ export class UserService
         where: {id: id}
       });
 
-      const { password,  remember_token, ...data } = user;
+      const { password,  refresh_token, ...data } = user;
 
       return data;
 
