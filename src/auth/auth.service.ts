@@ -1,5 +1,4 @@
 import { BadRequestException, HttpException, HttpStatus, Injectable, UnauthorizedException } from "@nestjs/common";
-import { UpdateAuthDto } from "./dto/update-auth.dto";
 import { JwtService } from "@nestjs/jwt";
 import { UserService } from "../user/user.service";
 import { LoginUserDto } from "./dto/login-user.dto";
@@ -15,6 +14,8 @@ import { SendOtpEmail } from "../mail/dto/send-otp-email";
 import { Status } from "../shared/status";
 import { TokenBlackListEntity } from "../token-black-list/entities/token-black-list.entity";
 import { LessThan } from "typeorm";
+import { OtpService } from "../otp/otp.service";
+import { TokenBlackListService } from "../token-black-list/token-black-list.service";
 
 @Injectable()
 export class AuthService {
@@ -23,9 +24,17 @@ export class AuthService {
     private usersService: UserService,
     private jwtService: JwtService,
     private mailService: MailService,
+    private otpService: OtpService,
+    private tokenBlackListService: TokenBlackListService,
   ) {}
 
 
+  async deleteInvalidedExpiredTokens () {
+    const currentTime = new Date();
+    await TokenBlackListEntity.delete({
+      expires_at: LessThan(currentTime),
+    });
+  }
   async validateUser(loginUserDto: LoginUserDto) {
     try {
       const { username, password } = loginUserDto;
@@ -54,23 +63,83 @@ export class AuthService {
     }
   }
 
+  async createAccessTokenFor2FA (user: any, action: Action, otp: string) {
+    const accessTokenPayload = {
+      id: user.id,
+      username: user.username,
+      roles: user.role,
+      _2fa: user.is_2_fa_active
+    };
 
-  async login(loginUserDto: LoginUserDto, res) {
-
-    res.clearCookie('access_token', {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+    const accessToken = this.jwtService.sign(accessTokenPayload, {
+      expiresIn: process.env.EXPIRES_IN_JWT,
+      secret: process.env.SECRET_JWT
     });
 
-    res.clearCookie('refresh_token', {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+
+    return {
+      action: action === Action.Login ? 'login with otp' : action,
+      user_id: user.id,
+      otp: otp,
+      access_token: accessToken
+    }
+  }
+
+  createOtp() {
+    const min = 100000;
+    const max = 999999;
+    const code = Math.floor(Math.random() * (max - min + 1)) + min;
+    return code.toString();
+  }
+
+  async createAccessAndRefreshToken (user: any) {
+    const accessTokenPayload = {
+      id: user.id,
+      username: user.username,
+      roles: user.role,
+      authenticate: true,
+    };
+
+    const accessToken = this.jwtService.sign(accessTokenPayload, {
+      expiresIn: process.env.EXPIRES_IN_JWT,
+      secret: process.env.SECRET_JWT
     });
 
-    const currentTime = new Date();
-    await TokenBlackListEntity.delete({
-      expires_at: LessThan(currentTime),
+    const refreshTokenPayload = {
+      userId: user.id,
+    };
+
+    const refreshToken = this.jwtService.sign(refreshTokenPayload, {
+      expiresIn: '7d',
+      secret: process.env.SECRET_JWT
     });
+
+    return {
+      refresh_token: refreshToken,
+      access_token: accessToken
+    }
+  }
+
+  async createAccessForRefreshToken (user: any) {
+    const accessTokenPayload = {
+      id: user.id,
+      username: user.username,
+      roles: user.role,
+      authenticate: true,
+    };
+
+    const accessToken = this.jwtService.sign(accessTokenPayload, {
+      expiresIn: process.env.EXPIRES_IN_JWT,
+      secret: process.env.SECRET_JWT
+    });
+
+    return {
+      access_token: accessToken
+    }
+  }
+  async login(loginUserDto: LoginUserDto) {
+
+    await this.deleteInvalidedExpiredTokens();
 
     const { username } = loginUserDto;
     const user = await UserEntity.findOne({
@@ -87,92 +156,25 @@ export class AuthService {
     }
 
     if (user.is_2_fa_active == true) {
-
-      const accessTokenPayload = {
-        id: user.id,
-        username: user.username,
-        roles: user.role,
-        _2fa: user.is_2_fa_active
-      };
-
-      const accessToken = this.jwtService.sign(accessTokenPayload, {
-        expiresIn: process.env.EXPIRES_IN_JWT,
-        secret: process.env.SECRET_JWT
-      });
-
-
-      res.cookie('access_token', accessToken, {
-        httpOnly: true, // Protejează cookie-ul de atacuri XSS
-        secure: process.env.NODE_ENV === 'production', // Folosește ternary operator pentru a seta secure
-        maxAge: parseInt(process.env.ACCES_TOKEN_EXPIRES_IN)
-      });
-
       return await this.generateSendOtp(user.id, Action.Login)
     }
 
+    const tokens = await this.createAccessAndRefreshToken(user);
 
-    const accessTokenPayload = {
-      id: user.id,
-      username: user.username,
-      roles: user.role,
-      authenticate: true,
-    };
-
-    const accessToken = this.jwtService.sign(accessTokenPayload, {
-      expiresIn: process.env.EXPIRES_IN_JWT,
-      secret: process.env.SECRET_JWT
-    });
-
-
-    res.cookie('access_token', accessToken, {
-      httpOnly: true, // Protejează cookie-ul de atacuri XSS
-      secure: process.env.NODE_ENV === 'production', // Folosește ternary operator pentru a seta secure
-      maxAge: parseInt(process.env.ACCES_TOKEN_EXPIRES_IN)
-    });
-
-
-    const refreshTokenPayload = {
-      userId: user.id,
-    };
-
-    const refreshToken = this.jwtService.sign(refreshTokenPayload, {
-      expiresIn: '7d',
-      secret: process.env.SECRET_JWT
-    });
-
-      user.refresh_token = refreshToken;
+      user.refresh_token = tokens.refresh_token;
       await user.save();
 
-    res.cookie('refresh_token', refreshToken, {
-      httpOnly: true, // Protejează cookie-ul de atacuri XSS
-      secure: process.env.NODE_ENV === 'production', // Folosește ternary operator pentru a seta secure
-      maxAge: parseInt(process.env.REFRESH_TOKEN_EXPIRES_IN)
-    });
-
-
-    return {
-      refresh_token: user.refresh_token,
-      access_token: accessToken
-    }
-
+    return tokens;
   }
 
   async generateSendOtp(id: string, action: Action) {
     try {
-      const min = 100000;
-      const max = 999999;
-      const code = Math.floor(Math.random() * (max - min + 1)) + min;
-      const otp = code.toString();
+      const otp = this.createOtp();
 
       const date = new Date();
       const expiresDate = new Date(date.getTime() + expirationTime);
 
-      const existingUser = await UserEntity.findOne({
-        where: {
-          id: id,
-          // is_2_fa_active: true,
-        },
-      });
+      const existingUser = await this.usersService.findOneReturnWithPass(id);
 
       console.log(id);
 
@@ -180,29 +182,15 @@ export class AuthService {
         throw new BadRequestException({message: 'user does not exist or has not enabled 2fa auth'});
       }
 
-      console.log('existingUser');
-      console.log(existingUser);
-
-
-      const existingOTPs = await OtpEntity.find({
-        where: {user: {id: existingUser.id}},
-      });
-
+      const existingOTPSForUser = await this.otpService.findAllForUser(id);
 
       await Promise.all(
-        existingOTPs.map(async (otp: OtpEntity) => {
+        existingOTPSForUser.map(async (otp: OtpEntity) => {
           await otp.remove();
         }),
       );
 
-      const twoFaToken = await new OtpEntity();
-      twoFaToken.user = existingUser;
-      twoFaToken.action = action;
-      twoFaToken.expires_at = expiresDate;
-      twoFaToken.otp = otp;
-
-
-     const savedOtp = await twoFaToken.save();
+     const savedOtp = await this.otpService.create(existingUser, action, expiresDate, otp);
 
       const otpBody: SendOtpEmail = {
         otp: otp,
@@ -212,155 +200,81 @@ export class AuthService {
 
       const sendOtp = await this.mailService.sendMail(otpBody);
 
-      return {
-        action: action === Action.Login ? 'login with otp' : action,
-        user_id: existingUser.id,
-        orp: savedOtp.otp
-      }
+      return await this.createAccessTokenFor2FA(existingUser, action, otp);
 
     } catch (e) {
       throw new BadRequestException(e.message);
     }
   }
+  async isOtpExpired(id: string, _2fa: OtpEntity, action) {
+    const timeNow = new Date(new Date().getTime());
+    const isExpired = _2fa.expires_at < timeNow;
 
-  async verifyOtpLogin(id: string, otp: string, action: Action, res, req) {
+
+    if (isExpired) {
+      console.log('otp introduced is expired');
+      await this.generateSendOtp(id, action);
+      throw new UnauthorizedException();
+    }
+  }
+  async verifyOtpLogin(id: string, otp: string, action: Action, accessTokenCookie: string) {
     try {
       const user = await UserEntity.findOne({
         where: { id: id },
       });
 
-      const _2fa = await OtpEntity.findOne({
-        where: {
-          user: {id: id},
-          otp: otp,
-        },
-        relations: ['user'],
-      });
+      const _2fa = await this.otpService.findOneByOtp(id, otp);
 
       if (!_2fa) {
         console.log('wrong otp');
         throw new UnauthorizedException();
       }
 
-      const timeNow = new Date(new Date().getTime());
-      const isExpired = _2fa.expires_at < timeNow;
-
-      // await _2fa.remove();
-
-      if (isExpired) {
-        console.log('otp introduced is expired');
-        await this.generateSendOtp(id, action);
-        throw new UnauthorizedException();
-      }
-
-
-
-      //todo  accessToken from cookies
-      const accessTokenCookie = req.cookies['access_token'];
+      await this.isOtpExpired(id, _2fa, action);
 
       if (!accessTokenCookie) {
         throw new UnauthorizedException('access_token from login user with username and password missing');
       }
-      const decodedToken: any = jwt.decode(accessTokenCookie)
 
-      const accessTokenPayload = {
-        id: decodedToken.id,
-        username: decodedToken.username,
-        roles: decodedToken.roles,
-        authenticate: true,
-      };
+      const token = await this.createAccessAndRefreshToken(user);
 
-      const refreshTokenPayload = {
-        userId: user.id,
-      };
-
-      const accessToken = this.jwtService.sign(accessTokenPayload, {
-        expiresIn: process.env.EXPIRES_IN_JWT,
-        secret: process.env.SECRET_JWT
-      });
-
-      const refreshToken = this.jwtService.sign(refreshTokenPayload, {
-        expiresIn: process.env.EXPIRES_REFRESH_TOKEN,
-        secret: process.env.SECRET_JWT
-      });
-
-      user.refresh_token = refreshToken;
+      user.refresh_token = token.refresh_token;
       await user.save();
 
-
-      res.cookie('access_token', accessToken, {
-        httpOnly: true, // Protejează cookie-ul de atacuri XSS
-        secure: process.env.NODE_ENV === 'production', // Folosește ternary operator pentru a seta secure
-        maxAge: 7 * 24 * 3600 * 1000, // 7 zile
-      });
-
-      res.cookie('refresh_token', refreshToken, {
-        httpOnly: true, // Protejează cookie-ul de atacuri XSS
-        secure: process.env.NODE_ENV === 'production', // Folosește ternary operator pentru a seta secure
-        maxAge: 7 * 24 * 3600 * 1000, // 7 zile
-      });
-
-      console.log('accessToken');
-      console.log(accessToken);
-      console.log('verified-token');
-
-      return { message: 'Login successful' };
-
+      return token;
     } catch (e) {
       throw new BadRequestException(e.message);
     }
   }
-
-  async refreshToken(req) {
+  async refreshToken(refreshToken: any) {
     try {
-      const refreshToken = req.cookies['refresh_token'];
 
       if (!refreshToken) {
         throw new HttpException('Refresh token missing', HttpStatus.BAD_REQUEST);
       }
 
-      // Decodificăm și verificăm refresh token-ul care conține doar ID-ul utilizatorului
       const decoded: any = jwt.verify(refreshToken, process.env.SECRET_JWT);
 
       if (!decoded || !decoded.userId) {
         throw new Error('Invalid refresh token');
       }
 
-      // Căutăm utilizatorul în baza de date după ID-ul din refresh token
-      const user = await this.usersService.findOne(decoded.userId.toString());
+      const user = await this.usersService.findOneReturnWithPass(decoded.userId.toString());
 
       if (!user) {
         throw new Error('User not found');
       }
 
-      // Creăm un nou access token folosind datele utilizatorului
-      const accessToken = this.jwtService.sign(
-        {
-          id: user.id,
-          username: user.username,
-          roles: user.role,
-        },
-        { secret: process.env.SECRET_JWT, expiresIn: process.env.EXPIRES_IN_JWT },
-      );
-
-      console.log('send new access token');
-      console.log(accessToken);
-
-      return { accessToken };
+      return await this.createAccessForRefreshToken(user);
     } catch (e) {
       throw new BadRequestException(e.message);
     }
   }
 
-  async logout(res: any, req: any) {
+  async logout(accessToken, refreshToken) {
     try {
-      const currentTime = new Date();
-      await TokenBlackListEntity.delete({
-        expires_at: LessThan(currentTime),
-      });
+      await this.deleteInvalidedExpiredTokens();
 
-      const accessToken = req.cookies['access_token']; // Asigură-te că numele cookie-ului este corect
-      const refreshToken = req.cookies['refresh_token']; // Dacă vrei să invalidezi și refresh_token-ul
 
       if (!accessToken || !refreshToken) {
        throw new BadRequestException('No token provided');
@@ -373,38 +287,21 @@ export class AuthService {
         throw new UnauthorizedException();
       }
 
-      const accessTokenBlacklistEntry = new TokenBlackListEntity();
-      accessTokenBlacklistEntry.token = accessToken;
-      accessTokenBlacklistEntry.expires_at = new Date(decodedAccessToken.exp * 1000); // Timestamp din expirație
-      accessTokenBlacklistEntry.user = user;
-      await accessTokenBlacklistEntry.save();
-
+      await this.tokenBlackListService.create(accessToken, decodedAccessToken, user);
 
       const decodedRefreshToken: any = jwt.verify(refreshToken, process.env.SECRET_JWT);
-
-      const refreshTokenBlacklistEntry = new TokenBlackListEntity();
-      refreshTokenBlacklistEntry.token = refreshToken;
-      refreshTokenBlacklistEntry.expires_at = new Date(decodedRefreshToken.exp * 1000);
-      refreshTokenBlacklistEntry.user = user;
-      await refreshTokenBlacklistEntry.save();
+      await this.tokenBlackListService.create(refreshToken, decodedRefreshToken, user);
 
 
-
-      res.clearCookie('access_token');
-      res.clearCookie('refresh_token');
-
-      const otp = await OtpEntity.find({
-        where: {
-          user: {id: user.id},
-        },
-      });
-      if (user.is_2_fa_active == true && otp.length !== 0) {
+      const userOtps = await this.otpService.findAllForUser(user.id);
+      if (userOtps) {
         await Promise.all(
-          otp.map(async (row: OtpEntity) => {
+          userOtps.map(async (row: OtpEntity) => {
             await row.remove();
           }),
         );
       }
+
       user.refresh_token = null;
       user.status = Status.Inactive;
       await user.save();
@@ -415,6 +312,4 @@ export class AuthService {
       throw new BadRequestException(e.message);
     }
   }
-
-
 }

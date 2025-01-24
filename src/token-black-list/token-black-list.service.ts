@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from "@nestjs/common";
 import { CreateTokenBlackListDto } from './dto/create-token-black-list.dto';
 import { UpdateTokenBlackListDto } from './dto/update-token-black-list.dto';
 import { TokenBlackListEntity } from "./entities/token-black-list.entity";
@@ -14,8 +14,17 @@ export class TokenBlackListService {
     });
   }
 
-  create(createTokenBlackListDto: CreateTokenBlackListDto) {
-    return 'This action adds a new tokenBlackList';
+  async create(token, decodedRefreshToken, user) {
+    try {
+      const refreshTokenBlacklistEntry = new TokenBlackListEntity();
+      refreshTokenBlacklistEntry.token = token;
+      refreshTokenBlacklistEntry.expires_at = new Date(decodedRefreshToken.exp * 1000);
+      refreshTokenBlacklistEntry.user = user;
+
+     return await refreshTokenBlacklistEntry.save();
+    } catch (e) {
+      throw new BadRequestException(e.message)
+    }
   }
 
   findAll() {

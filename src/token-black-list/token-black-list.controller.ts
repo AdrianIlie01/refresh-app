@@ -9,7 +9,6 @@ export class TokenBlackListController {
 
   @Post()
   create(@Body() createTokenBlackListDto: CreateTokenBlackListDto) {
-    return this.tokenBlackListService.create(createTokenBlackListDto);
   }
 
   @Get()

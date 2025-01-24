@@ -12,6 +12,8 @@ import { MailService } from "../mail/mail.service";
 import { RefreshTokenGuard } from "./guards/refresh-token.guard";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { TokenBlackListEntity } from "../token-black-list/entities/token-black-list.entity";
+import { OtpService } from "../otp/otp.service";
+import { TokenBlackListService } from "../token-black-list/token-black-list.service";
 
 @Module({
   imports: [
@@ -26,6 +28,8 @@ import { TokenBlackListEntity } from "../token-black-list/entities/token-black-l
     JwtService,
     UserInfoService,
     MailService,
+    OtpService,
+    TokenBlackListService,
     LoginStrategy,
     LoginGuard,
     RefreshTokenGuard

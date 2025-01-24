@@ -1,13 +1,12 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Res, HttpStatus, Req, UseGuards } from "@nestjs/common";
+import { Controller, Post, Body, Param, Res, HttpStatus, Req, UseGuards } from "@nestjs/common";
 import { AuthService } from './auth.service';
-import { CreateAuthDto } from './dto/create-auth.dto';
-import { UpdateAuthDto } from './dto/update-auth.dto';
 import { LoginUserDto } from "./dto/login-user.dto";
 import { Action } from "../shared/action";
-import { json } from "express";
 import { LoginGuard } from "./guards/login.guards";
 import * as process from "process";
 import { RefreshTokenGuard } from "./guards/refresh-token.guard";
+import { Roles } from "./decorators/roles.decorator";
+import { RolesGuard } from "./guards/roles.guard";
 
 @Controller('auth')
 export class AuthController {
@@ -20,8 +19,35 @@ export class AuthController {
     @Body() loginUserDto: LoginUserDto
   ) {
     try {
-      const login: any = await this.authService.login(loginUserDto, res);
-      return res.status(200).json(login);
+      res.clearCookie('access_token', {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+      });
+
+      res.clearCookie('refresh_token', {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+      });
+
+      const login: any = await this.authService.login(loginUserDto);
+
+      if (login.access_token) {
+        res.cookie('access_token', login.access_token, {
+          httpOnly: true, // Protejează cookie-ul de atacuri XSS
+          secure: process.env.NODE_ENV === 'production', // Folosește ternary operator pentru a seta secure
+          maxAge: parseInt(process.env.ACCES_TOKEN_EXPIRES_IN)
+        });
+      }
+
+      if (login.refresh_token) {
+        res.cookie('refresh_token', login.refresh_token, {
+          httpOnly: true, // Protejează cookie-ul de atacuri XSS
+          secure: process.env.NODE_ENV === 'production', // Folosește ternary operator pentru a seta secure
+          maxAge: parseInt(process.env.REFRESH_TOKEN_EXPIRES_IN)
+        });
+      }
+
+      return res.status(HttpStatus.OK).json(login);
     } catch (e) {
       return res.status(HttpStatus.BAD_REQUEST).json(e);
     }
@@ -49,7 +75,25 @@ export class AuthController {
     @Body() body: {action: Action, otp: string},
   ) {
     try {
-      const verify: any = await this.authService.verifyOtpLogin(id, body.otp, body.action, res, req);
+      const accessTokenCookie = req.cookies['access_token'];
+
+      const verify: any = await this.authService.verifyOtpLogin(id, body.otp, body.action, accessTokenCookie);
+
+      if (verify.access_token) {
+        res.cookie('access_token', verify.access_token, {
+          httpOnly: true, // Protejează cookie-ul de atacuri XSS
+          secure: process.env.NODE_ENV === 'production', // Folosește ternary operator pentru a seta secure
+          maxAge: parseInt(process.env.ACCES_TOKEN_EXPIRES_IN)
+        });
+      }
+
+      if (verify.refresh_token) {
+        res.cookie('refresh_token', verify.refresh_token, {
+          httpOnly: true, // Protejează cookie-ul de atacuri XSS
+          secure: process.env.NODE_ENV === 'production', // Folosește ternary operator pentru a seta secure
+          maxAge: parseInt(process.env.REFRESH_TOKEN_EXPIRES_IN)
+        });
+      }
       return res.status(HttpStatus.OK).json(verify);
     } catch (e) {
       return res.status(HttpStatus.BAD_REQUEST).json(e);
@@ -61,13 +105,16 @@ export class AuthController {
   @Post('refresh-token')
   async refreshToken(@Req() req, @Res() res) {
     try {
-      const { accessToken } = await this.authService.refreshToken(req);
-      return res.status(HttpStatus.OK).json({accessToken});
+      const refreshToken = req.cookies['refresh_token'];
+      const { access_token } = await this.authService.refreshToken(refreshToken);
+      return res.status(HttpStatus.OK).json({access_token});
     } catch (e) {
       return res.status(HttpStatus.BAD_REQUEST).json(e);
     }
   }
 
+  @UseGuards(RolesGuard)
+  @Roles('user')
   @UseGuards(LoginGuard)
   @Post('verify')
   async verify(
@@ -88,7 +135,13 @@ export class AuthController {
     @Req() req,
   ) {
     try {
-      const logout = await this.authService.logout(res, req);
+      const accessToken = req.cookies['access_token'];
+      const refreshToken = req.cookies['refresh_token'];
+
+      const logout = await this.authService.logout(accessToken, refreshToken);
+      res.clearCookie('access_token');
+      res.clearCookie('refresh_token');
+
       return res.status(200).json(logout);
     } catch (e) {
       return res.status(HttpStatus.BAD_REQUEST).json(e);

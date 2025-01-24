@@ -9,17 +9,15 @@ export class OtpController {
 
   @Post()
   create(@Body() createOtpDto: CreateOtpDto) {
-    return this.otpService.create(createOtpDto);
   }
 
   @Get()
   findAll() {
-    return this.otpService.findAll();
   }
 
   @Get(':id')
   findOne(@Param('id') id: string) {
-    return this.otpService.findOne(+id);
+    return this.otpService.findOne(id);
   }
 
   @Patch(':id')

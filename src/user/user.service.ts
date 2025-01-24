@@ -1,10 +1,9 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
-import { CreateUserDto } from './dto/create-user.dto';
-import { UpdateUserDto } from './dto/update-user.dto';
+import { CreateUserDto } from "./dto/create-user.dto";
+import { UpdateUserDto } from "./dto/update-user.dto";
 import { UserEntity } from "./entities/user.entity";
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from "bcrypt";
 import { UserInfoService } from "../user-info/user-info.service";
-import { UserInfoEntity } from "../user-info/entities/user-info.entity";
 
 @Injectable()
 export class UserService
@@ -55,13 +54,40 @@ export class UserService
         where: {id: id}
       });
 
-      const { password,  refresh_token, ...data } = user;
+      const { password, ...data } = user;
 
       return data;
 
     } catch (e) {
       throw new BadRequestException(e.message)
-    }  }
+    }
+  }
+
+  async findOneReturnWithPass(id: string) {
+    try{
+      return await UserEntity.findOne({
+        where: { id: id }
+      });
+
+    } catch (e) {
+      throw new BadRequestException(e.message)
+    }
+  }
+
+  async findUserByEmailOrUsername(identificator: string) {
+    try{
+      const  user = await UserEntity.findOne({
+        where: [{ username: identificator }, { email: identificator }],
+      });
+
+      const { password, ...data } = user;
+
+      return data;
+
+    } catch (e) {
+      throw new BadRequestException(e.message)
+    }
+  }
 
   async update(id: string, updateUserDto: UpdateUserDto) {
     try{

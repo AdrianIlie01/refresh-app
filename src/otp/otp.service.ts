@@ -1,19 +1,76 @@
-import { Injectable } from '@nestjs/common';
-import { CreateOtpDto } from './dto/create-otp.dto';
-import { UpdateOtpDto } from './dto/update-otp.dto';
+import { BadRequestException, Injectable } from "@nestjs/common";
+import { UpdateOtpDto } from "./dto/update-otp.dto";
+import { OtpEntity } from "./entities/otp.entity";
+import { Action } from "../shared/action";
+import { UserEntity } from "../user/entities/user.entity";
 
 @Injectable()
 export class OtpService {
-  create(createOtpDto: CreateOtpDto) {
-    return 'This action adds a new otp';
+ async create(user: UserEntity, action: Action, expiresAt, otp) {
+    try {
+      const twoFaToken = await new OtpEntity();
+      twoFaToken.user = user;
+      twoFaToken.action = action;
+      twoFaToken.expires_at = expiresAt;
+      twoFaToken.otp = otp;
+
+      return await twoFaToken.save();
+    } catch (e) {
+      throw new BadRequestException(e.message)
+    }
+ }
+
+ async findAllForUser(id: string) {
+    try {
+      return await OtpEntity.find({
+        where: {user: {id: id}},
+      });
+    } catch (e) {
+      throw new BadRequestException(e.message)
+    }  }
+
+ async findOne(id: string) {
+    try {
+      return await OtpEntity.findOne({
+        where: {user: {id: id}, action: Action.Login},
+      });
+    } catch (e) {
+      throw new BadRequestException(e.message)
+    }
   }
 
-  findAll() {
-    return `This action returns all otp`;
+  async findOneById(id: string) {
+    try {
+      return await OtpEntity.findOne({
+        where: {user: {id: id}},
+      });
+    } catch (e) {
+      throw new BadRequestException(e.message)
+    }
   }
 
-  findOne(id: number) {
-    return `This action returns a #${id} otp`;
+  async findOneByOtp(id: string, otp: string) {
+    try {
+      return await OtpEntity.findOne({
+        where: {
+          user: {id: id},
+          otp: otp,
+        },
+        relations: ['user'],
+      });
+    } catch (e) {
+      throw new BadRequestException(e.message)
+    }
+  }
+
+  async findOneForLogin(id: string) {
+    try {
+      return await OtpEntity.findOne({
+        where: {user: {id: id}, action: Action.Login},
+      });
+    } catch (e) {
+      throw new BadRequestException(e.message)
+    }
   }
 
   update(id: number, updateOtpDto: UpdateOtpDto) {
