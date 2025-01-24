@@ -1,4 +1,4 @@
 import { PartialType } from '@nestjs/mapped-types';
-import { CreateMailDto } from './create-mail.dto';
+import { SendOtpEmail } from './send-otp-email';
 
-export class UpdateMailDto extends PartialType(CreateMailDto) {}
+export class UpdateMailDto extends PartialType(SendOtpEmail) {}

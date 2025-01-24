@@ -9,6 +9,7 @@ import { UserEntity } from '../../user/entities/user.entity';
 import { AuthService } from '../auth.service';
 import * as jwt from 'jsonwebtoken';
 import * as process from "process";
+import { TokenBlackListEntity } from "../../token-black-list/entities/token-black-list.entity";
 
 @Injectable()
 export class LoginStrategy extends PassportStrategy(Strategy, 'login') {
@@ -30,14 +31,15 @@ export class LoginStrategy extends PassportStrategy(Strategy, 'login') {
         throw new UnauthorizedException('Token missing');
       }
 
+      const blacklistedAccessToken = await TokenBlackListEntity.findOne({
+        where: { token: accessToken },
+      });
 
-      // const decoded: any = jwt.verify(accessToken, process.env.secretKey);
-
-      console.log(accessToken);
+      if (blacklistedAccessToken) {
+        throw new Error('Token is blacklisted');
+      }
 
        const decodedAccessToken: any = jwt.verify(accessToken, process.env.SECRET_JWT);
-
-      console.log(decodedAccessToken);
 
        if (!decodedAccessToken) {
          throw new UnauthorizedException('Invalid access token');
@@ -45,15 +47,17 @@ export class LoginStrategy extends PassportStrategy(Strategy, 'login') {
 
        const user = await UserEntity.findOne({ where: { username: decodedAccessToken.username } });
 
-       if (user) {
-         console.log('user ok');
-       }
-
        if (!user) {
          throw new UnauthorizedException('User not found');
        }
 
-      console.log('guard - ok');
+       if (decodedAccessToken._2fa === true) {
+         throw new UnauthorizedException('User needs to validate otp');
+       }
+
+      if (decodedAccessToken.authenticate !== true) {
+        throw new UnauthorizedException('User is not authenticated');
+      }
 
       return { message: 'User authenticated successfully' };
     } catch (e) {

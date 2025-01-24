@@ -18,6 +18,8 @@ import { OtpEntity } from "./otp/entities/otp.entity";
 import { JwtModule } from "@nestjs/jwt";
 import * as process from "process";
 import { ConfigModule } from "@nestjs/config";
+import { TokenBlackListModule } from './token-black-list/token-black-list.module';
+import { TokenBlackListEntity } from "./token-black-list/entities/token-black-list.entity";
 
 
 @Module({
@@ -40,7 +42,8 @@ import { ConfigModule } from "@nestjs/config";
         UserInfoEntity,
         RoomEntity,
         VideoEntity,
-        OtpEntity
+        OtpEntity,
+        TokenBlackListEntity
       ],
       synchronize: true,
     }),
@@ -58,6 +61,7 @@ import { ConfigModule } from "@nestjs/config";
     UserInfoModule,
     VideoModule,
     OtpModule,
+    TokenBlackListModule,
   ],
   controllers: [AppController],
   providers: [AppService],

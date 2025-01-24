@@ -10,6 +10,11 @@ import { expirationTime } from "./constants/constants";
 import { OtpEntity } from "../otp/entities/otp.entity";
 import * as process from "process";
 import * as jwt from 'jsonwebtoken';
+import { MailService } from "../mail/mail.service";
+import { SendOtpEmail } from "../mail/dto/send-otp-email";
+import { Status } from "../shared/status";
+import { TokenBlackListEntity } from "../token-black-list/entities/token-black-list.entity";
+import { LessThan } from "typeorm";
 
 @Injectable()
 export class AuthService {
@@ -17,6 +22,7 @@ export class AuthService {
   constructor(
     private usersService: UserService,
     private jwtService: JwtService,
+    private mailService: MailService,
   ) {}
 
 
@@ -61,6 +67,10 @@ export class AuthService {
       secure: process.env.NODE_ENV === 'production',
     });
 
+    const currentTime = new Date();
+    await TokenBlackListEntity.delete({
+      expires_at: LessThan(currentTime),
+    });
 
     const { username } = loginUserDto;
     const user = await UserEntity.findOne({
@@ -76,31 +86,54 @@ export class AuthService {
       throw new UnauthorizedException();
     }
 
-
-
     if (user.is_2_fa_active == true) {
 
-      return await this.generateOtp(user.id, Action.Login)
+      const accessTokenPayload = {
+        id: user.id,
+        username: user.username,
+        roles: user.role,
+        _2fa: user.is_2_fa_active
+      };
 
+      const accessToken = this.jwtService.sign(accessTokenPayload, {
+        expiresIn: process.env.EXPIRES_IN_JWT,
+        secret: process.env.SECRET_JWT
+      });
+
+
+      res.cookie('access_token', accessToken, {
+        httpOnly: true, // Protejează cookie-ul de atacuri XSS
+        secure: process.env.NODE_ENV === 'production', // Folosește ternary operator pentru a seta secure
+        maxAge: parseInt(process.env.ACCES_TOKEN_EXPIRES_IN)
+      });
+
+      return await this.generateSendOtp(user.id, Action.Login)
     }
 
 
     const accessTokenPayload = {
-        id: user.id,
-        username: user.username,
-        roles: user.role,
-      };
-
-
-    const refreshTokenPayload = {
-      userId: user.id,
+      id: user.id,
+      username: user.username,
+      roles: user.role,
+      authenticate: true,
     };
-
 
     const accessToken = this.jwtService.sign(accessTokenPayload, {
       expiresIn: process.env.EXPIRES_IN_JWT,
       secret: process.env.SECRET_JWT
     });
+
+
+    res.cookie('access_token', accessToken, {
+      httpOnly: true, // Protejează cookie-ul de atacuri XSS
+      secure: process.env.NODE_ENV === 'production', // Folosește ternary operator pentru a seta secure
+      maxAge: parseInt(process.env.ACCES_TOKEN_EXPIRES_IN)
+    });
+
+
+    const refreshTokenPayload = {
+      userId: user.id,
+    };
 
     const refreshToken = this.jwtService.sign(refreshTokenPayload, {
       expiresIn: '7d',
@@ -110,20 +143,11 @@ export class AuthService {
       user.refresh_token = refreshToken;
       await user.save();
 
-    res.cookie('access_token', accessToken, {
-      httpOnly: true, // Protejează cookie-ul de atacuri XSS
-      secure: process.env.NODE_ENV === 'production', // Folosește ternary operator pentru a seta secure
-      maxAge: parseInt(process.env.ACCES_TOKEN_EXPIRES_IN)
-    });
-
     res.cookie('refresh_token', refreshToken, {
       httpOnly: true, // Protejează cookie-ul de atacuri XSS
       secure: process.env.NODE_ENV === 'production', // Folosește ternary operator pentru a seta secure
       maxAge: parseInt(process.env.REFRESH_TOKEN_EXPIRES_IN)
     });
-
-
-    // const { password, ...userData } = user;
 
 
     return {
@@ -133,7 +157,7 @@ export class AuthService {
 
   }
 
-  async generateOtp(id: string, action: Action) {
+  async generateSendOtp(id: string, action: Action) {
     try {
       const min = 100000;
       const max = 999999;
@@ -171,10 +195,6 @@ export class AuthService {
         }),
       );
 
-      // delete all of the otps because we generate new ones for each action
-      // even if the users has otp to change email, but he logs out - gets the otp on email,
-      // but need to be online to change it, for forgotten password he is already log out so he has no otps
-
       const twoFaToken = await new OtpEntity();
       twoFaToken.user = existingUser;
       twoFaToken.action = action;
@@ -184,7 +204,13 @@ export class AuthService {
 
      const savedOtp = await twoFaToken.save();
 
-     // const { user, ...tokenData } = savedOtp;
+      const otpBody: SendOtpEmail = {
+        otp: otp,
+        username: existingUser.username,
+        email: existingUser.email
+      }
+
+      const sendOtp = await this.mailService.sendMail(otpBody);
 
       return {
         action: action === Action.Login ? 'login with otp' : action,
@@ -197,7 +223,7 @@ export class AuthService {
     }
   }
 
-  async verifyOtp(id: string, otp: string, action: Action) {
+  async verifyOtpLogin(id: string, otp: string, action: Action, res, req) {
     try {
       const user = await UserEntity.findOne({
         where: { id: id },
@@ -211,9 +237,6 @@ export class AuthService {
         relations: ['user'],
       });
 
-      console.log('otp');
-      console.log(_2fa);
-
       if (!_2fa) {
         console.log('wrong otp');
         throw new UnauthorizedException();
@@ -222,33 +245,39 @@ export class AuthService {
       const timeNow = new Date(new Date().getTime());
       const isExpired = _2fa.expires_at < timeNow;
 
+      // await _2fa.remove();
+
       if (isExpired) {
         console.log('otp introduced is expired');
-        return await this.generateOtp(id, action);
-        //todo sa il si trimit si sa afisez ca l-am trimis
+        await this.generateSendOtp(id, action);
         throw new UnauthorizedException();
       }
 
-      const accessTokenPayload = {
-        id: user.id,
-        username: user.username,
-        roles: user.role,
-      };
 
+
+      //todo  accessToken from cookies
+      const accessTokenCookie = req.cookies['access_token'];
+
+      if (!accessTokenCookie) {
+        throw new UnauthorizedException('access_token from login user with username and password missing');
+      }
+      const decodedToken: any = jwt.decode(accessTokenCookie)
+
+      const accessTokenPayload = {
+        id: decodedToken.id,
+        username: decodedToken.username,
+        roles: decodedToken.roles,
+        authenticate: true,
+      };
 
       const refreshTokenPayload = {
         userId: user.id,
       };
 
-
-
       const accessToken = this.jwtService.sign(accessTokenPayload, {
         expiresIn: process.env.EXPIRES_IN_JWT,
         secret: process.env.SECRET_JWT
       });
-
-
-
 
       const refreshToken = this.jwtService.sign(refreshTokenPayload, {
         expiresIn: process.env.EXPIRES_REFRESH_TOKEN,
@@ -258,19 +287,38 @@ export class AuthService {
       user.refresh_token = refreshToken;
       await user.save();
 
-      return {
-        refresh_token: refreshToken,
-        access_token: accessToken
-      };
 
+      res.cookie('access_token', accessToken, {
+        httpOnly: true, // Protejează cookie-ul de atacuri XSS
+        secure: process.env.NODE_ENV === 'production', // Folosește ternary operator pentru a seta secure
+        maxAge: 7 * 24 * 3600 * 1000, // 7 zile
+      });
+
+      res.cookie('refresh_token', refreshToken, {
+        httpOnly: true, // Protejează cookie-ul de atacuri XSS
+        secure: process.env.NODE_ENV === 'production', // Folosește ternary operator pentru a seta secure
+        maxAge: 7 * 24 * 3600 * 1000, // 7 zile
+      });
+
+      console.log('accessToken');
+      console.log(accessToken);
+      console.log('verified-token');
+
+      return { message: 'Login successful' };
 
     } catch (e) {
       throw new BadRequestException(e.message);
     }
   }
 
-  async refreshToken(refreshToken: any) {
+  async refreshToken(req) {
     try {
+      const refreshToken = req.cookies['refresh_token'];
+
+      if (!refreshToken) {
+        throw new HttpException('Refresh token missing', HttpStatus.BAD_REQUEST);
+      }
+
       // Decodificăm și verificăm refresh token-ul care conține doar ID-ul utilizatorului
       const decoded: any = jwt.verify(refreshToken, process.env.SECRET_JWT);
 
@@ -294,7 +342,8 @@ export class AuthService {
         },
         { secret: process.env.SECRET_JWT, expiresIn: process.env.EXPIRES_IN_JWT },
       );
-      console.log('service jwt');
+
+      console.log('send new access token');
       console.log(accessToken);
 
       return { accessToken };
@@ -303,40 +352,69 @@ export class AuthService {
     }
   }
 
-  // async logout(req: Request) {
-  //   try {
-  //     const authHeader = JSON.parse(req.headers['authorization']);
-  //     const token = authHeader[0]['Bearer'];
-  //     const user = await UserEntity.findOne({
-  //       where: {
-  //         remember_token: token,
-  //       },
-  //     });
-  //     if (!user) {
-  //       throw new UnauthorizedException();
-  //     }
-  //     const otp = await TwoFaTokenEntity.find({
-  //       where: {
-  //         user_id: user.id,
-  //       },
-  //     });
-  //     if (user.is_2fa_active == true && otp.length !== 0) {
-  //       await Promise.all(
-  //         otp.map(async (row: TwoFaTokenEntity) => {
-  //           await row.remove();
-  //         }),
-  //       );
-  //     }
-  //     user.remember_token = null;
-  //     user.status = Status.Inactive;
-  //     await user.save();
-  //     return {
-  //       message: 'user.logout',
-  //     };
-  //   } catch (e) {
-  //     throw new BadRequestException(e.message);
-  //   }
-  // }
+  async logout(res: any, req: any) {
+    try {
+      const currentTime = new Date();
+      await TokenBlackListEntity.delete({
+        expires_at: LessThan(currentTime),
+      });
+
+      const accessToken = req.cookies['access_token']; // Asigură-te că numele cookie-ului este corect
+      const refreshToken = req.cookies['refresh_token']; // Dacă vrei să invalidezi și refresh_token-ul
+
+      if (!accessToken || !refreshToken) {
+       throw new BadRequestException('No token provided');
+      }
+
+      const decodedAccessToken: any = jwt.verify(accessToken, process.env.SECRET_JWT);
+
+      const user = await UserEntity.findOneBy({id: decodedAccessToken.user_id})
+      if (!user) {
+        throw new UnauthorizedException();
+      }
+
+      const accessTokenBlacklistEntry = new TokenBlackListEntity();
+      accessTokenBlacklistEntry.token = accessToken;
+      accessTokenBlacklistEntry.expires_at = new Date(decodedAccessToken.exp * 1000); // Timestamp din expirație
+      accessTokenBlacklistEntry.user = user;
+      await accessTokenBlacklistEntry.save();
+
+
+      const decodedRefreshToken: any = jwt.verify(refreshToken, process.env.SECRET_JWT);
+
+      const refreshTokenBlacklistEntry = new TokenBlackListEntity();
+      refreshTokenBlacklistEntry.token = refreshToken;
+      refreshTokenBlacklistEntry.expires_at = new Date(decodedRefreshToken.exp * 1000);
+      refreshTokenBlacklistEntry.user = user;
+      await refreshTokenBlacklistEntry.save();
+
+
+
+      res.clearCookie('access_token');
+      res.clearCookie('refresh_token');
+
+      const otp = await OtpEntity.find({
+        where: {
+          user: {id: user.id},
+        },
+      });
+      if (user.is_2_fa_active == true && otp.length !== 0) {
+        await Promise.all(
+          otp.map(async (row: OtpEntity) => {
+            await row.remove();
+          }),
+        );
+      }
+      user.refresh_token = null;
+      user.status = Status.Inactive;
+      await user.save();
+      return {
+        message: 'user.logout',
+      };
+    } catch (e) {
+      throw new BadRequestException(e.message);
+    }
+  }
 
 
 }

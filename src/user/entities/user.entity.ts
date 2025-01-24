@@ -12,6 +12,7 @@ import { UserInfoEntity } from "../../user-info/entities/user-info.entity";
 import { VideoEntity } from "../../video/entities/video.entity";
 import { OtpEntity } from "../../otp/entities/otp.entity";
 import { Status } from "../../shared/status";
+import { TokenBlackListEntity } from "../../token-black-list/entities/token-black-list.entity";
 
 @Entity('user')
 export class UserEntity extends BaseEntity {
@@ -56,4 +57,7 @@ export class UserEntity extends BaseEntity {
 
   @OneToMany(() => OtpEntity, (otp: OtpEntity) => otp.user)
   otp: OtpEntity
+
+  @OneToMany(() => TokenBlackListEntity, (token: TokenBlackListEntity) => token.user)
+  expired_token: TokenBlackListEntity
 }

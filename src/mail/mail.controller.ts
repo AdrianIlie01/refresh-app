@@ -1,6 +1,6 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, HttpStatus, Res } from "@nestjs/common";
 import { MailService } from './mail.service';
-import { CreateMailDto } from './dto/create-mail.dto';
+import { SendOtpEmail } from './dto/send-otp-email';
 import { UpdateMailDto } from './dto/update-mail.dto';
 
 @Controller('mail')
@@ -8,27 +8,13 @@ export class MailController {
   constructor(private readonly mailService: MailService) {}
 
   @Post()
-  create(@Body() createMailDto: CreateMailDto) {
-    return this.mailService.create(createMailDto);
+async create( @Res() res, @Body() createMailDto: SendOtpEmail) {
+    try {
+      const email = await this.mailService.sendMail(createMailDto);
+      return res.status(HttpStatus.OK).json(email);
+    } catch (e) {
+      return res.status(HttpStatus.BAD_REQUEST).json(e);
+    }
   }
 
-  @Get()
-  findAll() {
-    return this.mailService.findAll();
-  }
-
-  @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.mailService.findOne(+id);
-  }
-
-  @Patch(':id')
-  update(@Param('id') id: string, @Body() updateMailDto: UpdateMailDto) {
-    return this.mailService.update(+id, updateMailDto);
-  }
-
-  @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.mailService.remove(+id);
-  }
 }
