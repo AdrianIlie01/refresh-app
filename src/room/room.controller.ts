@@ -1,7 +1,10 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Res, HttpStatus } from "@nestjs/common";
 import { RoomService } from './room.service';
 import { CreateRoomDto } from './dto/create-room.dto';
 import { UpdateRoomDto } from './dto/update-room.dto';
+import { LoginGuard } from "../auth/guards/login.guards";
+import { RolesGuard } from "../auth/guards/roles.guard";
+import { Roles } from "../auth/decorators/roles.decorator";
 
 @Controller('room')
 export class RoomController {
@@ -10,6 +13,19 @@ export class RoomController {
   @Post()
   create(@Body() createRoomDto: CreateRoomDto) {
     return this.roomService.create(createRoomDto);
+  }
+
+  // @UseGuards(LoginGuard)
+  // @UseGuards(RolesGuard)
+  // @Roles('admin')
+  @Get('get-video/:name')
+  async getVideo(@Res() res, @Param('name') name: string) {
+    try {
+      // res.setHeader('Content-Type', 'video/mp4');
+      res.sendFile(name, { root: 'uploaded-videos' });
+    } catch (e) {
+      return res.status(HttpStatus.BAD_REQUEST).json(e);
+    }
   }
 
   @Get()

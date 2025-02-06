@@ -22,12 +22,15 @@ export class AuthController {
       res.clearCookie('access_token', {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
+        maxAge: +process.env.ACCES_TOKEN_EXPIRES_IN,
       });
 
       res.clearCookie('refresh_token', {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
-      });
+        maxAge: +process.env.REFRESH_TOKEN_EXPIRES_IN,
+
+    });
 
       const login: any = await this.authService.login(loginUserDto);
 

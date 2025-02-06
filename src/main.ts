@@ -9,10 +9,7 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.enableCors({
     exposedHeaders: ['x-forwarded-for'],
-
-    origin: process.env.ORIGIN,  // Adresa frontend-ului tău (poate fi localhost sau URL-ul aplicației)
-
-    // origin: 'http://localhost:4200',
+    origin: process.env.ORIGIN || 'http://localhost:4200',  // Adresa frontend-ului
     credentials: true, // Permite trimiterea cookie-urilor
   });
 

@@ -236,6 +236,11 @@ export class AuthService {
         throw new UnauthorizedException('access_token from login user with username and password missing');
       }
 
+      const decoded: any = jwt.decode(accessTokenCookie);
+      if (!decoded ||  decoded._2fa !== true) {
+        throw new UnauthorizedException('Invalid token for verifying otp - login');
+      }
+
       const token = await this.createAccessAndRefreshToken(user);
 
       user.refresh_token = token.refresh_token;
