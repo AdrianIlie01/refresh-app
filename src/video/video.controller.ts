@@ -28,9 +28,16 @@ export class VideoController {
   async create(
     @Res() res,
     @Param('id') id: string,
-    @UploadedFile() file: Express.Multer.File
+    @Body() body: any,
+    @UploadedFile() file: Express.Multer.File,
   ) {
     try {
+
+      console.log(file);
+      console.log('roomName:');
+      console.log(body.room_name);
+
+      console.log(typeof body.room_name);
 
       if (!file) {
         return res.status(HttpStatus.BAD_REQUEST).json({
@@ -38,7 +45,7 @@ export class VideoController {
         });
       }
 
-      const video = await this.videoService.create(id, file);
+      const video = await this.videoService.create(id, file, body);
       return res.status(HttpStatus.CREATED).json(video);
     } catch (e) {
       if (file) {

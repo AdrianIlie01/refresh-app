@@ -30,8 +30,11 @@ export class LoginStrategy extends PassportStrategy(Strategy, 'login') {
       // }
 
       // const accessToken = authHeader.split(' ')[1];
-      const accessToken = req.cookies['access_token']; // Citește token-ul din cookie
+      console.log('takes cookie');
+      // const accessToken = req.cookies['access_token'];
+      const accessToken = req.cookies.access_token; // Citește token-ul din cookie
 
+      console.log(req.cookies);
       console.log('from guard');
 
       console.log(accessToken);
@@ -40,12 +43,14 @@ export class LoginStrategy extends PassportStrategy(Strategy, 'login') {
         throw new UnauthorizedException('Token missing');
       }
 
+      console.log('a trecut de access_cookie');
+
       const blacklistedAccessToken = await TokenBlackListEntity.findOne({
         where: { token: accessToken },
       });
 
       if (blacklistedAccessToken) {
-        throw new Error('Token is blacklisted');
+        throw new UnauthorizedException('Token is blacklisted');
       }
 
        const decodedAccessToken: any = jwt.verify(accessToken, process.env.SECRET_JWT);
@@ -68,9 +73,10 @@ export class LoginStrategy extends PassportStrategy(Strategy, 'login') {
         throw new UnauthorizedException('User is not authenticated');
       }
 
-      return { message: 'User authenticated successfully' };
+      // req.user = decodedAccessToken;
+      return { message: 'User authenticated successfully', decodedAccessToken };
     } catch (e) {
-      throw new BadRequestException(e.message);
+      throw new UnauthorizedException(e.message);
     }
   }
 }

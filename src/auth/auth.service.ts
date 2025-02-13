@@ -30,10 +30,14 @@ export class AuthService {
 
 
   async deleteInvalidedExpiredTokens () {
-    const currentTime = new Date();
-    await TokenBlackListEntity.delete({
-      expires_at: LessThan(currentTime),
-    });
+    try {
+      const currentTime = new Date();
+      await TokenBlackListEntity.delete({
+        expires_at: LessThan(currentTime),
+      });
+    } catch (e) {
+      throw new BadRequestException(e.message)
+    }
   }
   async validateUser(loginUserDto: LoginUserDto) {
     try {
@@ -55,8 +59,11 @@ export class AuthService {
 
       if (user) {
         const { password, refresh_token, ...data } = user;
+        console.log('validated');
+
         return data;
       }
+
 
     } catch (e) {
       throw new BadRequestException(e.message);
@@ -78,10 +85,12 @@ export class AuthService {
 
 
     return {
-      action: action === Action.Login ? 'login with otp' : action,
-      user_id: user.id,
-      otp: otp,
-      access_token: accessToken
+      access_token_2fa: {
+        action: action === Action.Login ? 'login with otp' : action,
+        user_id: user.id,
+        otp: otp,
+        access_token: accessToken
+      }
     }
   }
 
@@ -139,15 +148,23 @@ export class AuthService {
   }
   async login(loginUserDto: LoginUserDto) {
 
+    console.log('?');
+
     await this.deleteInvalidedExpiredTokens();
 
     const { username } = loginUserDto;
+
+    console.log(username);
+
     const user = await UserEntity.findOne({
       where: [{ username: username }, { email: username }],
     });
 
+    console.log(user);
+
     user.refresh_token = null;
     await user.save();
+//todo daca are un refresh token deja ar trebui sa il bag in black list
 
     const validateUser = await this.validateUser(loginUserDto);
     if (!validateUser) {
@@ -156,6 +173,7 @@ export class AuthService {
     }
 
     if (user.is_2_fa_active == true) {
+      console.log('user has 2fa active');
       return await this.generateSendOtp(user.id, Action.Login)
     }
 
@@ -163,6 +181,9 @@ export class AuthService {
 
       user.refresh_token = tokens.refresh_token;
       await user.save();
+
+    console.log('tokens');
+    console.log(tokens);
 
     return tokens;
   }
@@ -219,6 +240,8 @@ export class AuthService {
   }
   async verifyOtpLogin(id: string, otp: string, action: Action, accessTokenCookie: string) {
     try {
+      console.log('verify-otp');
+
       const user = await UserEntity.findOne({
         where: { id: id },
       });
@@ -255,7 +278,7 @@ export class AuthService {
     try {
 
       if (!refreshToken) {
-        throw new HttpException('Refresh token missing', HttpStatus.BAD_REQUEST);
+        throw new UnauthorizedException('Refresh token missing');
       }
 
       const decoded: any = jwt.verify(refreshToken, process.env.SECRET_JWT);
@@ -266,8 +289,9 @@ export class AuthService {
 
       const user = await this.usersService.findOneReturnWithPass(decoded.userId.toString());
 
-      if (!user) {
-        throw new Error('User not found');
+      if (!user || user.refresh_token !== refreshToken) {
+        throw new UnauthorizedException('Invalid refresh token');
+        // throw new Error('User not found');
       }
 
       return await this.createAccessForRefreshToken(user);
@@ -317,4 +341,9 @@ export class AuthService {
       throw new BadRequestException(e.message);
     }
   }
+
+  async checkIfLogIn() {
+
+  }
+
 }

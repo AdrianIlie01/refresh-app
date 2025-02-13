@@ -8,7 +8,7 @@ import {
   Delete,
   BadRequestException,
   HttpStatus,
-  Res
+  Res, Req
 } from "@nestjs/common";
 import { UserService } from './user.service';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -30,6 +30,30 @@ export class UserController {
     }
   }
 
+  @Get('get-user')
+  async getUserInfoByReq(
+    @Res() res,
+    @Req() req ) {
+    try {
+      const token = req;
+      console.log('req');
+      console.log(req.cookies);
+
+      if (req.cookies && req.cookies.access_token) {
+        console.log('no ?');
+        const token = req.cookies.access_token;
+        const decodedToken = await this.userService.decodeToken(token);
+
+        return res.status(HttpStatus.OK).json(decodedToken);
+
+      } else {
+        return res.status(HttpStatus.UNAUTHORIZED).json({ message: "Unauthorized: access_token missing" });
+      }
+    } catch (e) {
+      return res.status(HttpStatus.BAD_REQUEST).json(e);
+    }
+  }
+
   @Get()
   async  findAll(
     @Res() res,
@@ -41,6 +65,7 @@ export class UserController {
       return res.status(HttpStatus.BAD_REQUEST).json(e);
     }
   }
+
 
   @Get(':id')
   async findOne(

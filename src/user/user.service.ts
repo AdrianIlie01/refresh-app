@@ -4,12 +4,14 @@ import { UpdateUserDto } from "./dto/update-user.dto";
 import { UserEntity } from "./entities/user.entity";
 import * as bcrypt from "bcrypt";
 import { UserInfoService } from "../user-info/user-info.service";
+import * as jwt from 'jsonwebtoken';
 
 @Injectable()
 export class UserService
 {
   constructor(
    private UserInfoService: UserInfoService,
+
   ) {}
   async create(createUserDto: CreateUserDto) {
     try{
@@ -96,8 +98,15 @@ export class UserService
       const user = await UserEntity.findOne({where: { id: id }});
       const initialUsername = user.username;
 
+      console.log('typeof' );
+      console.log(typeof username);
+      console.log(username.length);
 
-      typeof username !== 'undefined'
+      // typeof username !== 'undefined'
+      //   ? (user.username = username)
+      //   : (user.username = initialUsername);
+
+      username.length > 0
         ? (user.username = username)
         : (user.username = initialUsername);
 
@@ -107,9 +116,28 @@ export class UserService
       throw new BadRequestException(e.message)
     }  }
 
+
+  async getUserByReq() {
+    try {
+
+    } catch (e) {
+      throw new BadRequestException(e.message);
+    }
+  }
+
   async remove(id: string) {
     try{
+      const user = await UserEntity.findOne({where: {id: id}})
 
+      return await UserEntity.remove(user);
+    } catch (e) {
+      throw new BadRequestException(e.message)
+    }
+  }
+
+  async decodeToken(token: string) {
+    try {
+      return jwt.decode(token);
     } catch (e) {
       throw new BadRequestException(e.message)
     }

@@ -6,12 +6,17 @@ import { Express } from 'express'
 
 @Injectable()
 export class VideoService {
- async create(id, file: Express.Multer.File) {
+ async create(id, file: Express.Multer.File, body: any) {
    try{
      const user = await UserEntity.findOneBy({id: id});
 
+     if (body.room_name.trim().length == 0) {
+       throw new BadRequestException({message: 'room name is empty'})
+     }
+
    if (file) {
      const video = await new VideoEntity();
+     video.room_name = body.room_name
      video.name = file.filename;
      video.user = user;
     return  await video.save();

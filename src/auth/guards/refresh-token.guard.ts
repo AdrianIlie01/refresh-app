@@ -2,8 +2,8 @@ import {
   BadRequestException,
   CanActivate,
   ExecutionContext,
-  Injectable,
-} from '@nestjs/common';
+  Injectable, UnauthorizedException
+} from "@nestjs/common";
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { TokenBlackListEntity } from "../../token-black-list/entities/token-black-list.entity";
@@ -21,7 +21,7 @@ export class RefreshTokenGuard implements CanActivate {
       const refreshToken = request.cookies['refresh_token'];
 
       if (!refreshToken) {
-        throw new BadRequestException('No refresh token provided');
+        throw new UnauthorizedException('No refresh token provided');
       }
 
       // Verifică dacă refresh_token-ul este în blacklist
@@ -47,7 +47,7 @@ export class RefreshTokenGuard implements CanActivate {
       return true;
 
     } catch (e) {
-      throw new BadRequestException(e.message);
+      throw new UnauthorizedException(e.message);
     }
   }
 }

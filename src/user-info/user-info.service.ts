@@ -51,11 +51,32 @@ export class UserInfoService {
     }
   }
 
+  async findOneByUser(id: string) {
+    try {
+      const user = await UserEntity.findOneBy({id: id})
+      console.log(user);
+      if (user) {
+        const info = await UserInfoEntity.findOne({
+          where:{user: {id: user.id}}
+        });
+        return info;
+      }
+
+      throw new BadRequestException('user or user-info not found with the provided id');
+    } catch (e) {
+      throw new BadRequestException(e.message);
+    }
+  }
+
   async update(id: string, updateUserInfoDto: UpdateUserInfoDto) {
     try {
-      const info = await UserInfoEntity.findOneBy({id: id});
+      const info = await UserInfoEntity.findOneBy({user:{id: id}});
 
       const {person_region, phone} = updateUserInfoDto;
+
+      console.log(info);
+      console.log(person_region);
+      console.log(typeof person_region);
 
       typeof person_region !== 'undefined'
       ? info.person_region = person_region

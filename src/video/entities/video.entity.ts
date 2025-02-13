@@ -17,6 +17,9 @@ export class VideoEntity extends BaseEntity {
   @Column({ type: 'varchar' })
   name: string;
 
+  @Column({ type: 'varchar', unique: true, nullable: false })
+  room_name: string;
+
   @CreateDateColumn({ type: 'datetime' })
   create_date: Date;
 

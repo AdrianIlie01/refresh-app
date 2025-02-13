@@ -47,6 +47,19 @@ export class UserInfoController {
     }
   }
 
+  @Get('user/:id')
+  async findOneByUser(
+    @Res() res,
+    @Param('id') id: string)
+  {
+    try {
+      const info = await this.userInfoService.findOneByUser(id);
+      return res.status(HttpStatus.OK).json(info);
+    } catch (e) {
+      return res.status(HttpStatus.BAD_REQUEST).json(e);
+    }
+  }
+
   @Patch(':id')
   async update(
     @Res() res,
